@@ -34,6 +34,7 @@ export default function Home() {
   const [githubUrl, setGithubUrl] = useState<string>('');
   const debouncedGithubUrl = useDebounce(githubUrl, 1000);
   const [isLoading, setIsLoading] = useState(false);
+  const [analyseContent, setAnalyseContent] = useState<string>('');
 
   useEffect(() => {
     setIsMounted(true);
@@ -44,6 +45,8 @@ export default function Home() {
     if (match) {
       const [, owner, repo] = match;
       fetchRepoStructure(owner, repo);
+    } else {
+      console.log('No match found');
     }
   }, [debouncedGithubUrl]);
 
@@ -60,6 +63,7 @@ export default function Home() {
       }
 
       const root = await fetchAllFiles(owner, repo, token);
+      console.log(root)
       setTreeData(root);
     } catch (error) {
       console.error('Error fetching repo structure:', error);
@@ -99,6 +103,14 @@ export default function Home() {
     return response.data;
   };
 
+  const handleNodeClick = (nodeData: any) => {
+    if (nodeData.data.content !== undefined) {
+      setAnalyseContent(nodeData.data.content);
+    } else {
+      setAnalyseContent('This is a directory.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen">
       <input
@@ -119,15 +131,18 @@ export default function Home() {
               <Tree
                 data={treeData}
                 orientation="horizontal"
-                pathFunc="diagonal"
-                translate={{ x: 300, y: 50 }}
-                separation={{ siblings: 2, nonSiblings: 2 }}
+                pathFunc="step"
+                translate={{ x: 100, y: 200 }}
+                separation={{ siblings: 1.5, nonSiblings: 2 }}
+                nodeSize={{ x: 300, y: 50 }}
+                onNodeClick={handleNodeClick}
+                scaleExtent={{ min: 0.5, max: 1 }}
               />
             )
           )}
         </div>
-        <div className="w-2/5 border border-blue-500">
-          {/* Content for the right panel */}
+        <div className="w-2/5 border border-blue-500 p-4 overflow-auto">
+          <pre className="whitespace-pre-wrap">{analyseContent}</pre>
         </div>
       </div>
     </div>
