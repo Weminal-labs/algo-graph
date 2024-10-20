@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Tree from 'react-d3-tree';
 import axios from 'axios';
 
@@ -11,22 +11,48 @@ interface TreeNode {
   children?: TreeNode[];
 }
 
+// Custom debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 export default function Home() {
   const [isMounted, setIsMounted] = useState(false);
   const [treeData, setTreeData] = useState<TreeNode | null>(null);
   const [githubUrl, setGithubUrl] = useState<string>('');
+  const debouncedGithubUrl = useDebounce(githubUrl, 1000);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
-    fetchRepoStructure("ipaleka", "algorand-contracts-testing");
   }, []);
 
-  const fetchRepoStructure = async (owner: string, repo: string) => {
+  useEffect(() => {
+    const match = debouncedGithubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+    if (match) {
+      const [, owner, repo] = match;
+      fetchRepoStructure(owner, repo);
+    }
+  }, [debouncedGithubUrl]);
+
+  const fetchRepoStructure = useCallback(async (owner: string, repo: string) => {
     try {
       if (!owner || !repo) {
         throw new Error('Owner and repo are required');
       }
-      
+      setIsLoading(true);
       const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
 
       if (!token) {
@@ -37,8 +63,10 @@ export default function Home() {
       setTreeData(root);
     } catch (error) {
       console.error('Error fetching repo structure:', error);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, []);
 
   const fetchAllFiles = async (owner: string, repo: string, token: string | null = null) => {
     const rootNode: TreeNode = { name: repo, children: [] };
@@ -73,17 +101,29 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen">
-      <input type="text" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
+      <input
+        type="text"
+        value={githubUrl}
+        onChange={(e) => setGithubUrl(e.target.value)}
+        placeholder="Enter GitHub repository URL"
+        className="p-2 border border-gray-300 rounded"
+      />
       <div className="flex flex-1">
         <div className="w-3/5 border border-red-500">
-          {isMounted && treeData && (
-            <Tree
-              data={treeData}
-              orientation="horizontal"
-              pathFunc="diagonal"
-              translate={{ x: 300, y: 50 }}
-              separation={{ siblings: 2, nonSiblings: 2 }}
-            />
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <p>Loading repository structure...</p>
+            </div>
+          ) : (
+            isMounted && treeData && (
+              <Tree
+                data={treeData}
+                orientation="horizontal"
+                pathFunc="diagonal"
+                translate={{ x: 300, y: 50 }}
+                separation={{ siblings: 2, nonSiblings: 2 }}
+              />
+            )
           )}
         </div>
         <div className="w-2/5 border border-blue-500">
