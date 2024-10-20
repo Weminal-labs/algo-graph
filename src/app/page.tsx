@@ -2,44 +2,81 @@
 
 import { useState, useEffect } from 'react';
 import Tree from 'react-d3-tree';
+import axios from 'axios';
 
 // Sample tree data
-const treeData = {
-  name: 'Project Root',
-  children: [
-    {
-      name: 'src',
-      children: [
-        { name: 'app' },
-        { name: 'components' },
-        { name: 'styles' },
-      ],
-    },
-    {
-      name: 'public',
-      children: [
-        { name: 'images' },
-      ],
-    },
-    { name: 'package.json' },
-    { name: 'README.md' },
-  ],
-};
+interface TreeNode {
+  name: string;
+  content?: string;
+  children?: TreeNode[];
+}
 
 export default function Home() {
-
   const [isMounted, setIsMounted] = useState(false);
+  const [treeData, setTreeData] = useState<TreeNode | null>(null);
+  const [githubUrl, setGithubUrl] = useState<string>('');
 
   useEffect(() => {
     setIsMounted(true);
+    fetchRepoStructure("ipaleka", "algorand-contracts-testing");
   }, []);
+
+  const fetchRepoStructure = async (owner: string, repo: string) => {
+    try {
+      if (!owner || !repo) {
+        throw new Error('Owner and repo are required');
+      }
+      
+      const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
+
+      if (!token) {
+        console.warn('GitHub token not found in environment variables');
+      }
+
+      const root = await fetchAllFiles(owner, repo, token);
+      setTreeData(root);
+    } catch (error) {
+      console.error('Error fetching repo structure:', error);
+    }
+  };
+
+  const fetchAllFiles = async (owner: string, repo: string, token: string | null = null) => {
+    const rootNode: TreeNode = { name: repo, children: [] };
+
+    async function fetchContents(path = '', parentNode: TreeNode) {
+      const contents = await getRepoContents(owner, repo, path, token);
+      for (const item of contents) {
+        if (item.type === 'file') {
+          const fileContent = await axios.get(item.download_url);
+          parentNode?.children?.push({
+            name: item.name,
+            content: fileContent.data
+          });
+        } else if (item.type === 'dir') {
+          const newFolder: TreeNode = { name: item.name, children: [] };
+          parentNode?.children?.push(newFolder);
+          await fetchContents(item.path, newFolder);
+        }
+      }
+    }
+
+    await fetchContents('', rootNode);
+    return rootNode;
+  };
+
+  const getRepoContents = async (owner: string, repo: string, path = '', token: string | null = null) => {
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const headers = token ? { Authorization: `token ${token}` } : {};
+    const response = await axios.get(url, { headers });
+    return response.data;
+  };
 
   return (
     <div className="flex flex-col h-screen">
-      <input type="text" />
+      <input type="text" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} />
       <div className="flex flex-1">
         <div className="w-3/5 border border-red-500">
-          {isMounted && (
+          {isMounted && treeData && (
             <Tree
               data={treeData}
               orientation="horizontal"
@@ -50,7 +87,7 @@ export default function Home() {
           )}
         </div>
         <div className="w-2/5 border border-blue-500">
-          Hello World
+          {/* Content for the right panel */}
         </div>
       </div>
     </div>
