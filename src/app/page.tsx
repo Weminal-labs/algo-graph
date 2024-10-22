@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Tree from 'react-d3-tree';
 import axios from 'axios';
+import genAI from '@/lib/gemini';
+import ReactMarkdown from 'react-markdown';
 
 // Sample tree data
 interface TreeNode {
@@ -35,6 +37,7 @@ export default function Home() {
   const debouncedGithubUrl = useDebounce(githubUrl, 1000);
   const [isLoading, setIsLoading] = useState(false);
   const [analyseContent, setAnalyseContent] = useState<string>('');
+  const [analyzeResult, setAnalyzeResult] = useState<string>('');
 
   useEffect(() => {
     setIsMounted(true);
@@ -111,6 +114,34 @@ export default function Home() {
     }
   };
 
+  const analyzeRepo = async () => {
+    if (!treeData) {
+      setAnalyzeResult('No repository data available to analyze.');
+      return;
+    }
+
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const prompt = `Analyze this GitHub repository structure and the content of the selected file:
+
+Repository Structure:
+${JSON.stringify(treeData, null, 2)}
+
+Selected File Content:
+${analyseContent}
+
+Please provide insights (relationships between files, dependencies, etc.) on the repository structure and the content of the selected file.`;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      setAnalyzeResult(text);
+    } catch (error) {
+      console.error('Error analyzing repository:', error);
+      setAnalyzeResult('An error occurred while analyzing the repository.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen">
       <input
@@ -141,8 +172,23 @@ export default function Home() {
             )
           )}
         </div>
-        <div className="w-2/5 border border-blue-500 p-4 overflow-auto">
-          <pre className="whitespace-pre-wrap">{analyseContent}</pre>
+        <div className="w-2/5 border border-blue-500 p-4 overflow-auto flex flex-col">
+          {/* <pre className="whitespace-pre-wrap flex-1">{analyseContent}</pre> */}
+          <div className="mt-4">
+            <button
+              onClick={analyzeRepo}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              disabled={!treeData}
+            >
+              Analyze Repository
+            </button>
+            {analyzeResult && (
+              <div className="mt-4 p-4 bg-gray-100 rounded">
+                <h3 className="font-bold mb-2">Analysis Result:</h3>
+                <ReactMarkdown>{analyzeResult}</ReactMarkdown>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
